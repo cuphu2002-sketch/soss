@@ -132,6 +132,8 @@
     const SPAWN_RATE = 0.04; // Tốc độ bắn nhanh bình thường, lãng mạn
     const COLORS = ['#ff2d75', '#ff85a2', '#ffffff', '#00d2ff'];
 
+    const MAX_PARTICLES = 220; // giới hạn để không bị lag khi vuốt liên tục
+
     class Heart {
         constructor(x, y, color) {
             this.x = x;
@@ -146,12 +148,24 @@
             this.decay = Math.random() * 0.005 + 0.005; 
         }
 
+        // Vẽ trái tim bằng vector path thay vì ký tự emoji.
+        // Lý do: emoji "❤" là glyph màu cố định trên iOS/Android nên
+        // luôn hiện màu đỏ bất kể fillStyle - vẽ path thì màu luôn đúng trên mọi máy.
         draw() {
+            const s = this.size;
             ctx.save();
             ctx.globalAlpha = this.alpha;
             ctx.fillStyle = this.color;
-            ctx.font = `${this.size}px Arial`;
-            ctx.fillText('❤', this.x, this.y);
+            ctx.translate(this.x, this.y);
+            ctx.beginPath();
+            const top = s * 0.3;
+            ctx.moveTo(0, top);
+            ctx.bezierCurveTo(0, 0, -s / 2, 0, -s / 2, top);
+            ctx.bezierCurveTo(-s / 2, (s + top) / 2, 0, (s + top) / 2, 0, s);
+            ctx.bezierCurveTo(0, (s + top) / 2, s / 2, (s + top) / 2, s / 2, top);
+            ctx.bezierCurveTo(s / 2, 0, 0, 0, 0, top);
+            ctx.closePath();
+            ctx.fill();
             ctx.restore();
         }
 
@@ -163,8 +177,11 @@
         }
     }
 
-    function createExplosion(x, y) {
-        for (let i = 0; i < 15; i++) {
+    function createExplosion(x, y, count = 15) {
+        // Nếu đã quá nhiều hạt thì bỏ qua để tránh lag/dồn ứ trái tim
+        if (particles.length >= MAX_PARTICLES) return;
+        const n = Math.min(count, MAX_PARTICLES - particles.length);
+        for (let i = 0; i < n; i++) {
             particles.push(new Heart(x, y, COLORS[Math.floor(Math.random() * COLORS.length)]));
         }
     }
@@ -195,9 +212,13 @@
         }
     }, { passive: true });
 
+    let lastTouchMove = 0;
     window.addEventListener('touchmove', (e) => {
+        const now = Date.now();
+        if (now - lastTouchMove < 60) return; // giãn cách để tránh spam hạt gây lag
+        lastTouchMove = now;
         for (let i = 0; i < e.changedTouches.length; i++) {
-            createExplosion(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+            createExplosion(e.changedTouches[i].clientX, e.changedTouches[i].clientY, 6);
         }
     }, { passive: true });
 
